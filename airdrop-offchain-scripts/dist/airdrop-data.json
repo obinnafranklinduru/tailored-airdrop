@@ -1,0 +1,34 @@
+{
+  "merkleRoot": "0x89f61b8bb814e1c89536e4acc91bf6767ad27fe935e50e5658840eb54a70e3d0",
+  "claims": {
+    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {
+      "index": 0,
+      "tokenContract": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "tokenId": "0",
+      "amount": "100000000000000000000",
+      "proof": [
+        "0x1de63a47de54da598070cec59dd7c0236ff9daef3a9a652bfd2ae6e4287dfcf6",
+        "0xd08776d9d40ae44b39918d59c4fafa6cf00f0d98436ce1d3beb8ce9199b4af9e"
+      ]
+    },
+    "0x70997970C51812dc3A010C7d01b50e0d17dc79C8": {
+      "index": 1,
+      "tokenContract": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+      "tokenId": "42",
+      "amount": "1",
+      "proof": [
+        "0xeebab948434f52caeb29872f71f19cc997733f872e3a694f17e7a0332d76965b",
+        "0xd08776d9d40ae44b39918d59c4fafa6cf00f0d98436ce1d3beb8ce9199b4af9e"
+      ]
+    },
+    "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC": {
+      "index": 2,
+      "tokenContract": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+      "tokenId": "0",
+      "amount": "50000000000000000000",
+      "proof": [
+        "0x51ecb4df702760925b92d5aec9b5f5237b7e94889225dc724c0e7c195ec12991"
+      ]
+    }
+  }
+}

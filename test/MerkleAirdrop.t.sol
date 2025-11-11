@@ -1,236 +1,269 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
-import {Test, console} from "forge-std/Test.sol";
+import "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
+import {Merkle} from "murky/Merkle.sol";
+
+// Contract Under Test
 import {MerkleAirdrop} from "../src/MerkleAirdrop.sol";
-import {AirdropVault} from "../src/AirdropVault.sol";
-import {IAirdropVault} from "../src/interfaces/IAirdropVault.sol";
-import {MockERC20} from "./mocks/MockERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IAirdrop} from "../src/interfaces/IAirdrop.sol";
 
+// Mocks
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {ERC721Mock} from "./mocks/token/ERC721Mock.sol";
+
+/**
+ * @title MerkleAirdropTest
+ * @author BinnaDev
+ * @notice Test suite for the MerkleAirdrop contract.
+ * @dev This test uses `murky` (dmfxyz/murky)
+ * for reliable and clean Merkle tree generation, aligning with our
+ * philosophy of using battle-tested tools.
+ */
 contract MerkleAirdropTest is Test {
-    using SafeERC20 for MockERC20;
-
-    // Contracts
+    // --- Contract & Mocks ---
     MerkleAirdrop public airdrop;
-    AirdropVault public vault;
-    MockERC20 public token;
+    ERC20Mock public erc20;
+    ERC721Mock public erc721;
 
-    // Test Users
-    address public user1 = address(0x1111111111111111111111111111111111111111);
-    address public user2 = address(0x2222222222222222222222222222222222222222);
-    address public user3 = address(0x3333333333333333333333333333333333333333);
-    address public admin = address(0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF);
-    address public randomUser = address(0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEF);
+    // --- Test Users ---
+    address public owner = makeAddr("owner");
+    address public userA = makeAddr("userA");
+    address public userB = makeAddr("userB");
+    address public userC = makeAddr("userC");
+    address public attacker = makeAddr("attacker");
 
-    // Test Data
-    uint256 public amount1 = 100 * 1e18;
-    uint256 public amount2 = 200 * 1e18;
-    uint256 public amount3 = 300 * 1e18;
+    // --- Merkle Tree Data ---
+    // Use the correct Merkle contract from Murky
+    Merkle internal merkleTree;
+    bytes32 public merkleRoot;
 
-    // Merkle Tree Data
-    bytes32 public root;
-    bytes32[] public proof1;
-    bytes32[] public proof2;
-    bytes32[] public proof3;
+    // We store the proofs for easy access in tests.
+    bytes32[] public proofA; // Proof for leaf 0
+    bytes32[] public proofB; // Proof for leaf 1
+    bytes32[] public proofC; // Proof for leaf 2
 
-    function setUp() public {
-        // 1. Deploy contracts and mint tokens
-        token = new MockERC20("Mock Token", "MOCK", 18);
-        vault = new AirdropVault(address(token), admin);
-        token.mint(address(vault), 1000 * 1e18); // Mint 1000 tokens to the vault
+    // --- Allocation Data ---
+    // User A (index 0): 100 ERC20
+    uint256 public constant INDEX_A = 0;
+    uint256 public constant AMOUNT_A = 100e18;
+    uint256 public constant TOKEN_ID_A = 0; // 0 for ERC20
 
-        // 2. Calculate Merkle Root & Proofs
-        // This simulates the off-chain generation process.
-        // Hashing: H(H(abi.encode(index, address, amount)))
+    // User B (index 1): 1 ERC721 (ID 42)
+    uint256 public constant INDEX_B = 1;
+    uint256 public constant AMOUNT_B = 1; // 1 for ERC721
+    uint256 public constant TOKEN_ID_B = 42;
 
-        // Leaf 1
-        bytes32 inner1 = keccak256(abi.encode(0, user1, amount1));
-        bytes32 leaf1 = keccak256(abi.encode(inner1));
-
-        // Leaf 2
-        bytes32 inner2 = keccak256(abi.encode(1, user2, amount2));
-        bytes32 leaf2 = keccak256(abi.encode(inner2));
-
-        // Leaf 3
-        bytes32 inner3 = keccak256(abi.encode(2, user3, amount3));
-        bytes32 leaf3 = keccak256(abi.encode(inner3));
-
-        // Create a sorted array of leaves as merkletreejs does
-        bytes32[] memory leaves = new bytes32[](3);
-        leaves[0] = leaf1; // 0x608e...
-        leaves[1] = leaf2; // 0x6f31...
-        leaves[2] = leaf3; // 0x4f15...
-
-        // Sort: [leaf3, leaf1, leaf2]
-        (leaves[0], leaves[2]) = (leaves[2], leaves[0]);
-        // leaves[0] = 0x4f15... (leaf3)
-        // leaves[1] = 0x6f31... (leaf2)
-        // leaves[2] = 0x608e... (leaf1)
-        (leaves[1], leaves[2]) = (leaves[2], leaves[1]);
-        // leaves[0] = 0x4f15... (leaf3)
-        // leaves[1] = 0x608e... (leaf1)
-        // leaves[2] = 0x6f31... (leaf2)
-
-        // --- Calculate Tree ---
-        bytes32 node1 = leaves[0]; // 0x4f15... (leaf3)
-        bytes32 node2 = leaves[1]; // 0x608e... (leaf1)
-        bytes32 node3 = leaves[2]; // 0x6f31... (leaf2)
-
-        // --- FIX: Correct Merkle Math ---
-        // We must replicate the OZ library's pair-sorting logic.
-        bytes32 h12 = hashPair(node1, node2); // 0xc877...
-        bytes32 h33 = hashPair(node3, node3); // 0x618e...
-        root = hashPair(h12, h33); // This sorts h33 before h12
-        // root = 0x1da9bc4b073bf7f62d7dfda4b613d7c8e91ecafe52fd4f03ac26d47e72487852
-
-        // --- FIX: Recalculate Proofs ---
-
-        // Proof for (0, user1, 100e18) -> node2 (leaf1)
-        proof1 = new bytes32[](2);
-        proof1[0] = node1; // 0x4f15...
-        proof1[1] = h33; // 0x618e...
-
-        // Proof for (1, user2, 200e18) -> node3 (leaf2)
-        proof2 = new bytes32[](2);
-        proof2[0] = node3; // 0x6f31... (its sibling is itself)
-        proof2[1] = h12; // 0xc877...
-
-        // Proof for (2, user3, 300e18) -> node1 (leaf3)
-        proof3 = new bytes32[](2);
-        proof3[0] = node2; // 0x608e...
-        proof3[1] = h33; // 0x618e...
-
-        // 3. Deploy the Airdrop contract
-        airdrop = new MerkleAirdrop(root, address(vault));
-
-        // 4. Authorize the Airdrop contract in the Vault
-        vm.prank(admin);
-        vault.setAirdropContract(address(airdrop));
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* Happy Paths                                                                */
-    /* -------------------------------------------------------------------------- */
-
-    function test_Claim_Success_User1() public {
-        vm.startPrank(user1);
-        airdrop.claim(0, amount1, proof1);
-        assertEq(token.balanceOf(user1), amount1);
-        assertTrue(airdrop.isClaimed(0));
-        vm.stopPrank();
-    }
-
-    function test_Claim_Success_User2() public {
-        vm.startPrank(user2);
-        airdrop.claim(1, amount2, proof2);
-        assertEq(token.balanceOf(user2), amount2);
-        assertTrue(airdrop.isClaimed(1));
-        vm.stopPrank();
-    }
-
-    function test_Claim_Success_User3() public {
-        vm.startPrank(user3);
-        airdrop.claim(2, amount3, proof3);
-        assertEq(token.balanceOf(user3), amount3);
-        assertTrue(airdrop.isClaimed(2));
-        vm.stopPrank();
-    }
-
-    function test_Claim_EmitEvent() public {
-        // This SETS the expectation: 2 topics (index, account), 1 data (amount)
-        vm.expectEmit(true, true, false, true, address(airdrop));
-        emit MerkleAirdrop.Claimed(0, user1, amount1);
-
-        // This TRIGGERS the event
-        vm.prank(user1);
-        airdrop.claim(0, amount1, proof1);
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* Revert Paths                                */
-    /* -------------------------------------------------------------------------- */
-
-    function test_Revert_DoubleClaim() public {
-        // First claim (success)
-        vm.prank(user1);
-        airdrop.claim(0, amount1, proof1);
-        assertEq(token.balanceOf(user1), amount1);
-
-        // Second claim (revert)
-        vm.expectRevert(BitmapState.AlreadyClaimed.selector);
-        vm.prank(user1);
-        airdrop.claim(0, amount1, proof1);
-    }
-
-    function test_Revert_InvalidProof() public {
-        bytes32[] memory invalidProof = new bytes32[](2);
-        invalidProof[0] = bytes32(0xdeadbeef);
-        invalidProof[1] = bytes32(0xdeadbeef);
-
-        vm.expectRevert(MerkleAirdrop.InvalidProof.selector);
-        vm.prank(user1);
-        airdrop.claim(0, amount1, invalidProof);
-    }
-
-    function test_Revert_WrongClaimer() public {
-        // User 2 tries to claim User 1's drop
-        vm.expectRevert(MerkleAirdrop.InvalidProof.selector);
-        vm.prank(user2);
-        airdrop.claim(0, amount1, proof1);
-    }
-
-    function test_Revert_WrongAmount() public {
-        // User 1 tries to claim with wrong amount
-        vm.expectRevert(MerkleAirdrop.InvalidProof.selector);
-        vm.prank(user1);
-        airdrop.claim(0, 999 * 1e18, proof1);
-    }
-
-    function test_Revert_WrongIndex() public {
-        // User 1 tries to claim with wrong index
-        vm.expectRevert(MerkleAirdrop.InvalidProof.selector);
-        vm.prank(user1);
-        airdrop.claim(99, amount1, proof1);
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* Gas Snapshots                               */
-    /* -------------------------------------------------------------------------- */
-
-    function test_Gas_Claim_FirstInSlot() public {
-        // Warm up the storage slot
-        // assertEq(airdrop.isClaimed(0), false);
-
-        vm.startPrank(user1);
-        airdrop.claim(0, amount1, proof1);
-        vm.stopPrank();
-    }
-
-    function test_Gas_Claim_SecondInSlot() public {
-        // User 1 (index 0) claims first, warming up slot 0
-        vm.startPrank(user1);
-        airdrop.claim(0, amount1, proof1);
-        vm.stopPrank();
-
-        // User 2 (index 1) claims second, hitting a warm slot
-        vm.startPrank(user2);
-        airdrop.claim(1, amount2, proof2);
-        vm.stopPrank();
-    }
-
-    /* -------------------------------------------------------------------------- */
-    /* Helper Functions                               */
-    /* -------------------------------------------------------------------------- */
+    // User C (index 2): 50 ERC20
+    uint256 public constant INDEX_C = 2;
+    uint256 public constant AMOUNT_C = 50e18;
+    uint256 public constant TOKEN_ID_C = 0; // 0 for ERC20
 
     /**
-     * @dev Helper to mimic OpenZeppelin's internal Merkle proof hashing.
+     * @notice Mirrors the on-chain leaf hashing (H(H(data))).
+     * @dev MUST match MerkleAirdrop._hashLeaf exactly.
      */
-    function hashPair(bytes32 a, bytes32 b) internal pure returns (bytes32) {
-        if (a < b) {
-            return keccak256(abi.encodePacked(a, b));
-        } else {
-            return keCEccak256(abi.encodePacked(b, a));
-        }
+    function _hashLeaf(uint256 index, address claimant, address tokenContract, uint256 tokenId, uint256 amount)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32 innerHash = keccak256(abi.encode(index, claimant, tokenContract, tokenId, amount));
+
+        return keccak256(abi.encode(innerHash));
     }
+
+    /**
+     * @notice Sets up the test environment, including the Merkle tree.
+     */
+    function setUp() public {
+        vm.startPrank(owner);
+
+        // 1. Deploy Mock Tokens
+        erc20 = new ERC20Mock();
+        erc721 = new ERC721Mock("TestNFT", "TNFT");
+
+        // 2. Construct Merkle Tree using Murky
+        bytes32[] memory leaves = new bytes32[](3);
+        leaves[0] = _hashLeaf(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A);
+        leaves[1] = _hashLeaf(INDEX_B, userB, address(erc721), TOKEN_ID_B, AMOUNT_B);
+        leaves[2] = _hashLeaf(INDEX_C, userC, address(erc20), TOKEN_ID_C, AMOUNT_C);
+
+        merkleTree = new Merkle();
+        merkleRoot = merkleTree.getRoot(leaves);
+
+        proofA = merkleTree.getProof(leaves, 0);
+        proofB = merkleTree.getProof(leaves, 1);
+        proofC = merkleTree.getProof(leaves, 2);
+
+        // We pass address(0) for the trusted forwarder in this test.
+        airdrop = new MerkleAirdrop(merkleRoot, address(0));
+
+        //  Fund the Airdrop Contract
+        erc20.mint(address(airdrop), 1_000_000e18);
+        erc721.mint(address(airdrop), TOKEN_ID_B); // Mint NFT ID 42
+
+        vm.stopPrank();
+    }
+
+    // --- Test: Happy Paths ---
+
+    function test_claim_ERC20_succeeds() public {
+        // Check initial state
+        assertEq(erc20.balanceOf(userA), 0);
+        assertEq(airdrop.isClaimed(INDEX_A), false);
+
+        // Expect the event
+        vm.expectEmit(true, true, true, true);
+        emit IAirdrop.Claimed("Merkle", INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A);
+
+        // Prank as User A and claim
+        vm.prank(userA);
+        airdrop.claim(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A, proofA);
+
+        // Check final state
+        assertEq(erc20.balanceOf(userA), AMOUNT_A);
+        assertEq(airdrop.isClaimed(INDEX_A), true);
+    }
+
+    function test_claim_ERC721_succeeds() public {
+        // Check initial state
+        assertEq(erc721.ownerOf(TOKEN_ID_B), address(airdrop));
+        assertEq(airdrop.isClaimed(INDEX_B), false);
+
+        // Expect the event
+        vm.expectEmit(true, true, true, true);
+        emit IAirdrop.Claimed("Merkle", INDEX_B, userB, address(erc721), TOKEN_ID_B, AMOUNT_B);
+
+        // Prank as User B and claim
+        vm.prank(userB);
+        airdrop.claim(INDEX_B, userB, address(erc721), TOKEN_ID_B, AMOUNT_B, proofB);
+
+        // Check final state
+        assertEq(erc721.ownerOf(TOKEN_ID_B), userB);
+        assertEq(airdrop.isClaimed(INDEX_B), true);
+    }
+
+    // --- Test: Failure Cases (Security) ---
+
+    function test_fail_doubleClaim() public {
+        // 1. First claim (success)
+        vm.prank(userA);
+        airdrop.claim(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A, proofA);
+
+        // 2. Second claim (fail)
+        vm.prank(userA);
+        vm.expectRevert(abi.encodeWithSelector(IAirdrop.MerkleAirdrop_AlreadyClaimed.selector, INDEX_A));
+        airdrop.claim(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A, proofA);
+    }
+
+    function test_fail_invalidProof() public {
+        // User A tries to claim with User B's proof
+        vm.prank(userA);
+        vm.expectRevert(IAirdrop.MerkleAirdrop_InvalidProof.selector);
+        airdrop.claim(
+            INDEX_A,
+            userA,
+            address(erc20),
+            TOKEN_ID_A,
+            AMOUNT_A,
+            proofB // <-- Invalid proof
+        );
+    }
+
+    function test_fail_tamperedLeafData() public {
+        // User A tries to claim 1,000 tokens instead of 100
+        // The proof is correct, but the leaf hash will be wrong
+        uint256 tamperedAmount = 1000e18;
+
+        vm.prank(userA);
+        vm.expectRevert(IAirdrop.MerkleAirdrop_InvalidProof.selector);
+        airdrop.claim(
+            INDEX_A,
+            userA,
+            address(erc20),
+            TOKEN_ID_A,
+            tamperedAmount, // <-- Tampered data
+            proofA
+        );
+    }
+
+    function test_fail_notClaimant() public {
+        // Attacker (pranked) tries to claim User A's allocation
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAirdrop.MerkleAirdrop_NotClaimant.selector,
+                userA, // expected claimant
+                attacker // sender
+            )
+        );
+        airdrop.claim(
+            INDEX_A,
+            userA, // claimant in leaf
+            address(erc20),
+            TOKEN_ID_A,
+            AMOUNT_A,
+            proofA
+        );
+    }
+
+    function test_fail_proofTooLong() public {
+        // Create a proof longer than MAX_PROOF_DEPTH (32)
+        bytes32[] memory longProof = new bytes32[](33);
+        // (Proof content doesn't matter, just length)
+
+        vm.prank(userA);
+        vm.expectRevert();
+        airdrop.claim(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A, longProof);
+    }
+
+    function test_fail_invalidAllocation_zero() public {
+        // For now, we will test the revert inside `claim`:
+        // We create a new tree with a 0-amount leaf
+        bytes32 zeroLeaf = _hashLeaf(0, userA, address(erc20), 0, 0);
+
+        // Use Murky to create a 1-leaf tree
+        bytes32[] memory leaves = new bytes32[](2);
+        leaves[0] = zeroLeaf;
+        leaves[1] = zeroLeaf;
+
+        // Use correct Murky API
+        Merkle zeroMerkle = new Merkle();
+        bytes32 zeroRoot = zeroMerkle.getRoot(leaves);
+        bytes32[] memory zeroProof = zeroMerkle.getProof(leaves, 0);
+
+        MerkleAirdrop zeroAirdrop = new MerkleAirdrop(zeroRoot, address(0));
+        erc20.mint(address(zeroAirdrop), 1e18);
+
+        vm.prank(userA);
+        vm.expectRevert(IAirdrop.Airdrop_InvalidAllocation.selector);
+        zeroAirdrop.claim(0, userA, address(erc20), 0, 0, zeroProof);
+    }
+
+    // --- Test: Gas Snapshots ---
+
+    function test_gas_claim_ERC20_cold() public {
+        // This is the first claim in the bitmap slot 0
+        vm.prank(userA);
+        vm.recordLogs();
+        airdrop.claim(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A, proofA);
+        // (Gas report will show this)
+    }
+
+    function test_gas_claim_ERC20_warm() public {
+        // Claim A (cold)
+        vm.prank(userA);
+        airdrop.claim(INDEX_A, userA, address(erc20), TOKEN_ID_A, AMOUNT_A, proofA);
+
+        // Claim C (warm, as it's in the same bitmap slot < 256)
+        vm.prank(userC);
+        vm.recordLogs();
+        airdrop.claim(INDEX_C, userC, address(erc20), TOKEN_ID_C, AMOUNT_C, proofC);
+    }
+
+    // TODO: test_claim_ERC2771_succeeds()
+    // This requires a mock forwarder setup.
+    // We will add this in Milestone 3.
 }
