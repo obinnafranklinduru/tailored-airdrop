@@ -175,6 +175,8 @@ contract MerkleAirdrop is IAirdrop, ERC2771Context, ReentrancyGuard {
     /**
      * @dev Overrides the `_msgSender()` from `ERC2771Context` to enable
      * meta-transactions. This is the heart of our gasless support.
+     *
+     * Why do this? Because we're also inheriting from other contracts (ReentrancyGuard, IAirdrop) and Solidity requires you to explicitly choose which parent's `_msgSender()` to use when there's potential ambiguity.
      */
     function _msgSender() internal view override(ERC2771Context) returns (address) {
         return ERC2771Context._msgSender();
