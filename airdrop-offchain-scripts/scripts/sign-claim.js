@@ -1,23 +1,17 @@
-/**
- * @title EIP-712 Signing Helper (JavaScript)
- * @author BinnaDev
- * @notice An example script demonstrating how to generate an EIP-712
- * signature for the SignatureAirdrop.sol contract.
- * @dev This would be run on a trusted backend, or by a user's wallet.
- */
-
-const { ethers, Wallet } = require("ethers");
+require("dotenv").config();
+const { ethers, Wallet, getAddress } = require("ethers");
 
 // --- CONFIGURATION ---
 
 // This should be a securely stored private key (e.g., in .env)
 // For this example, we use a known test wallet.
-const SIGNER_PRIVATE_KEY = "TODO";
+const SIGNER_PRIVATE_KEY = process.env.ANVIL_PRIVATE_KEY;
 
-const AIRDROP_CONTRACT_ADDRESS = "TODO";
+const AIRDROP_CONTRACT_ADDRESS =
+  process.env.ANVIL_SIGNATURE_AIRDROP_CONTRACT_ADDRESS;
 const CHAIN_ID = 31337; // localhost/hardhat/anvil
 
-const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+const provider = new ethers.JsonRpcProvider(process.env.ANVIL_RPC_URL);
 const wallet = new Wallet(SIGNER_PRIVATE_KEY, provider);
 
 // --- EIP-712 DEFINITIONS (must match contract) ---
@@ -78,8 +72,8 @@ async function main() {
 
   // Example: Sign a claim for 100 ERC20 tokens
   const payload = {
-    claimant: claimantAddress,
-    tokenContract: "0xDc64a140Aa3E9811000e04A59a8C9aC590d5dD0a", // Mock ERC20
+    claimant: getAddress(claimantAddress),
+    tokenContract: getAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8"), // Mock ERC20
     tokenId: 0,
     amount: "100000000000000000000", // 100 tokens
     nonce: currentNonce,

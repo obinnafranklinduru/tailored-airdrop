@@ -12,13 +12,13 @@ import {IAirdrop} from "./interfaces/IAirdrop.sol";
 
 /**
  * @title SignatureAirdrop
- * @author BinnaDev
+ * @author BinnaDev (Obinna Franklin Duru)
  * @notice A modular, secure contract for airdrops verified by EIP-712 signatures.
- * @dev This contract allows a trusted backend to sign claim payloads, which
- * users (or relayers) can submit. It uses EIP-712 for domain-separated,
- * typed signatures, and `nonces` for replay protection.
- * It inherits from `ERC2771Context` but the claim logic is designed to
- * send tokens to the `claimant` (the signer), not `_msgSender()`.
+ * @dev This contract allows a trusted backend (or authorized signer) to sign
+ * claim payloads, which users (or relayers) can submit.
+ * - It uses EIP-712 for domain-separated, typed signatures.
+ * - It uses `Nonces` for robust replay protection.
+ * - It is `ERC2771Context` compatible.
  */
 contract SignatureAirdrop is IAirdrop, ERC2771Context, ReentrancyGuard, EIP712, Nonces {
     /**

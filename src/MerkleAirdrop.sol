@@ -12,14 +12,13 @@ import {IAirdrop} from "./interfaces/IAirdrop.sol";
 
 /**
  * @title MerkleAirdrop
- * @author BinnaDev
- * @notice A modular, gas-efficient, and secure contract for airdrops
- * verified by Merkle proofs.
- * @dev This contract implements the `IAirdrop` interface, uses OpenZeppelin's
- * `BitMaps` for gas-efficient claim tracking, `ReentrancyGuard` for security,
- * and `ERC2771Context` to natively support gasless claims via a trusted
- * forwarder. The Merkle root is immutable, set at deployment for
- * maximum trust.
+ * @author BinnaDev (Obinna Franklin Duru)
+ * @notice A modular, secure contract for airdrops verified by a Merkle tree.
+ * @dev This contract acts as a token vault. It holds the airdrop tokens
+ * and allows users to claim them by providing a valid Merkle proof.
+ * - It uses a bitmap for gas-efficient, indexed claim tracking.
+ * - It is `ERC2771Context` compatible for gasless claims.
+ * - The Merkle root is `immutable` for maximum trust.
  */
 contract MerkleAirdrop is IAirdrop, ERC2771Context, ReentrancyGuard {
     using BitMaps for BitMaps.BitMap;
