@@ -1,6 +1,6 @@
 # Advanced Airdrop System
 
-**Author:** BinnaDev (Obinna Franklin Duru)  
+**Author:** [BinnaDev (Obinna Franklin Duru)](https://x.com/BinnaDev)
 **Status:** Audit-Ready  
 **Solidity:** ^0.8.24  
 **Framework:** Foundry
@@ -142,3 +142,11 @@ Security is the primary value of this project.
 - **Checks-Effects-Interactions:** This pattern is strictly followed to prevent re-entrancy.
 - **nonReentrant Guard:** All claim functions use OpenZeppelin's `nonReentrant` modifier.
 - **Immutable Root:** The `MERKLEROOT` is immutable and cannot be changed.
+
+## 🤝 Connect
+
+### Obinna Franklin Duru
+
+- [Follow on X](https://x.com/BinnaDev)
+- [LinkedIn](https://www.linkedin.com/in/obinna-franklin-duru/)
+- _Open for smart contract audits and development roles._
